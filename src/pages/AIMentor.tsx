@@ -105,15 +105,21 @@ export default function AIMentor() {
     <DashboardLayout>
       <div className="h-full flex flex-col gap-4 p-6 overflow-hidden relative">
         {/* Page Background Light Pillar */}
-        <div className="absolute inset-x-0 top-0 h-full z-0 pointer-events-none opacity-50 flex justify-center">
+        <div className="absolute inset-x-0 top-0 h-full z-0 pointer-events-none flex justify-center">
           <div className="w-[800px] h-full">
             <LightPillar
               topColor="#5227FF"
               bottomColor="#FF9FFC"
-              intensity={1.2}
-              pillarWidth={3.5}
-              glowAmount={0.012}
-              pillarHeight={0.2}
+              intensity={1}
+              rotationSpeed={0.3}
+              glowAmount={0.002}
+              pillarWidth={3}
+              pillarHeight={0.4}
+              noiseIntensity={0.5}
+              pillarRotation={25}
+              interactive={false}
+              mixBlendMode="screen"
+              quality="high"
             />
           </div>
         </div>
