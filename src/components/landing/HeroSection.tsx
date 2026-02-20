@@ -11,7 +11,7 @@ import heroBg from "@/assets/hero-bg.jpg";
 
 // Lazy load 3D component
 const FloatingOrb = React.lazy(() => import("@/components/3d/FloatingOrb").then(m => ({ default: m.FloatingOrb })));
-import { Aurora } from "@/components/ui/aurora";
+import GridDistortion from "@/components/ui/grid-distortion";
 
 const stats = [
   { value: 50000, suffix: "+", label: "Career Paths Generated" },
@@ -66,19 +66,17 @@ export function HeroSection() {
         className="absolute inset-0 z-0"
         style={{ y: bgY }}
       >
-        <div className="absolute inset-0 bg-gradient-to-b from-background via-background/90 to-background z-10" />
-        <div className="absolute inset-0 z-0 opacity-50 dark:opacity-30">
-          <Aurora
-            colorStops={['#00D1FF', '#7cff67', '#5227FF']}
-            amplitude={1.2}
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/80 to-background z-10" />
+        <div className="absolute inset-0 z-0 opacity-80 dark:opacity-60">
+          <GridDistortion
+            imageSrc={heroBg}
+            grid={20}
+            mouse={0.2}
+            strength={0.12}
+            relaxation={0.94}
             className="w-full h-full"
           />
         </div>
-        <img
-          src={heroBg}
-          alt=""
-          className="w-full h-full object-cover opacity-20 dark:opacity-10"
-        />
       </motion.div>
 
       {/* Gradient Orbs */}
