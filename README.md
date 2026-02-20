@@ -16,9 +16,15 @@ Ascend Career is an AI-powered professional development platform designed to hel
 
 ### 3. 📄 AI Resume Intelligence
 - **Deep Analysis**: Powered by **Google Gemini API**, providing detailed ATS scoring, skill extraction, and career recommendations.
+- **Resume-Driven Jobs**: Automatically recommends live job openings from **RapidAPI (Active Jobs DB)** based on your analyzed skills.
 - **Resume History**: A dedicated management system where you can view all past analyses, delete old ones, or instantly regenerate your career roadmap from a previous resume.
 
-### 4. 🤖 AI Career Mentor
+### 4. 🔍 Live Job Search
+- **Multi-Source Search**: Aggregates live job listings from **JSearch** and **Active Jobs DB** via **RapidAPI**.
+- **Global & Remote Filters**: Search by country, employment type, or switch to the dedicated **Remote Jobs** tab.
+- **Save for Later**: Bookmark interesting opportunities to your dashboard.
+
+### 5. 🤖 AI Career Mentor
 - **Context-Aware Guidance**: A 24/7 AI mentor ready to answer your career questions, help with interview prep, or provide industry insights.
 - **Cloud-Synced History**: All your mentor conversations are saved to Firestore, allowing you to pick up exactly where you left off.
 
@@ -27,7 +33,7 @@ Ascend Career is an AI-powered professional development platform designed to hel
 - **UI Components**: shadcn/ui, Lucide React
 - **Backend & Persistence**: Firebase (Auth, Firestore, Storage)
 - **AI Models**: Google Gemini Pro & Flash
-- **External APIs**: YouTube Data API v3
+- **External APIs**: YouTube Data API v3, RapidAPI (JSearch, Active Jobs DB, Remote Jobs)
 
 ## ⚙️ Setup & Installation
 
@@ -55,6 +61,7 @@ Ascend Career is an AI-powered professional development platform designed to hel
    VITE_GEMINI_MENTOR_API_KEY=your_gemini_mentor_key
    VITE_GEMINI_ROADMAP_API_KEY=your_gemini_roadmap_key
    VITE_YOUTUBE_API_KEY=your_youtube_key
+   VITE_RAPIDAPI_KEY=your_rapidapi_key
    ```
 
 4. **Run in development mode**:
