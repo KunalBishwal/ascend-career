@@ -106,20 +106,22 @@ export default function AIMentor() {
       <div className="min-h-[calc(100vh-5rem)] flex flex-col gap-4 p-6 overflow-hidden relative">
         {/* Page Background Light Pillar */}
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex justify-center">
-          <LightPillar
-            topColor="#5227FF"
-            bottomColor="#FF9FFC"
-            intensity={1}
-            rotationSpeed={0.3}
-            glowAmount={0.002}
-            pillarWidth={3.5}
-            pillarHeight={1}
-            noiseIntensity={0.5}
-            pillarRotation={25}
-            interactive={false}
-            mixBlendMode="screen"
-            quality="high"
-          />
+          <div className="w-[800px] h-full">
+            <LightPillar
+              topColor="#5227FF"
+              bottomColor="#FF9FFC"
+              intensity={1}
+              rotationSpeed={0.3}
+              glowAmount={0.002}
+              pillarWidth={3.5}
+              pillarHeight={1}
+              noiseIntensity={0.5}
+              pillarRotation={25}
+              interactive={false}
+              mixBlendMode="screen"
+              quality="high"
+            />
+          </div>
         </div>
 
         <div className="relative z-10 h-full flex flex-col gap-4">
