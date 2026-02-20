@@ -21,6 +21,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
 import { AnimatedButton } from "@/components/ui/animated-button";
 import { cn } from "@/lib/utils";
+import { Aurora } from "@/components/ui/aurora";
 
 interface Job {
   id: string;
@@ -328,19 +329,32 @@ export default function Jobs() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <h1 className="text-2xl sm:text-3xl font-display font-bold mb-2">
-            <GradientText>Job Search</GradientText>
-          </h1>
-          <p className="text-muted-foreground">
-            Discover real opportunities from across the web.
-          </p>
-        </motion.div>
+      <div className="space-y-6 relative">
+        {/* Header with Aurora Background */}
+        <div className="relative rounded-3xl overflow-hidden bg-background/5 border border-border/50 group">
+          <div className="absolute inset-0 z-0 pointer-events-none opacity-40 group-hover:opacity-60 transition-opacity">
+            <Aurora
+              colorStops={['#3B82F6', '#60A5FA', '#93C5FD']}
+              amplitude={0.8}
+              blend={0.5}
+              className="w-full h-full"
+            />
+          </div>
+
+          <div className="relative z-10 p-8 sm:p-10">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <h1 className="text-3xl sm:text-4xl font-display font-bold mb-3">
+                <GradientText>Job Search</GradientText>
+              </h1>
+              <p className="text-muted-foreground text-lg max-w-2xl">
+                Discover real opportunities from across the web.
+              </p>
+            </motion.div>
+          </div>
+        </div>
 
         {/* Tab Switcher */}
         <motion.div

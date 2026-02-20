@@ -5,7 +5,7 @@ import { Mail, Lock, User, Eye, EyeOff, Loader2, ArrowRight } from "lucide-react
 import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
 import { AnimatedButton } from "@/components/ui/animated-button";
-import { AnimatedBackground } from "@/components/ui/animated-background";
+import { Aurora } from "@/components/ui/aurora";
 import { signIn, signUp, signInWithGoogle } from "@/integrations/firebase/auth";
 
 export default function Login() {
@@ -68,8 +68,14 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 relative">
-            <AnimatedBackground />
+        <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
+            <div className="absolute inset-0 z-0">
+                <Aurora
+                    colorStops={['#0ea5e9', '#8b5cf6', '#0ea5e9']}
+                    amplitude={1.0}
+                    className="w-full h-full opacity-40"
+                />
+            </div>
 
             <motion.div
                 initial={{ opacity: 0, y: 30 }}
