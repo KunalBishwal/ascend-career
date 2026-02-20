@@ -45,9 +45,9 @@ void main() {
   vec2 q = vec2(rp.x * (uCanvas.x / uCanvas.y), rp.y);
   q /= max(uScale, 0.0001);
   q /= 0.5 + 0.2 * dot(q, q);
-  q += 0.2 * cos(t) - 7.56;
+  q += 0.2 * cos(t) - 4.56;
   vec2 toward = (uPointer - rp);
-  q += toward * uMouseInfluence * 0.2;
+  q += toward * uMouseInfluence * 0.4;
 
     vec3 col = vec3(0.0);
     float a = 1.0;
@@ -98,8 +98,8 @@ void main() {
       col = clamp(col, 0.0, 1.0);
     }
 
-    vec3 rgb = (uTransparent > 0) ? col * a : col;
-    gl_FragColor = vec4(rgb, a);
+    vec3 rgb = (uTransparent > 0) ? col : col;
+    gl_FragColor = vec4(rgb, a * 1.5);
 }
 `;
 
