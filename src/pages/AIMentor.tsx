@@ -103,9 +103,9 @@ export default function AIMentor() {
 
   return (
     <DashboardLayout>
-      <div className="h-full flex flex-col gap-4 p-6 overflow-hidden relative">
+      <div className="min-h-[calc(100vh-5rem)] flex flex-col gap-4 p-6 overflow-hidden relative">
         {/* Page Background Light Pillar */}
-        <div className="absolute inset-x-0 top-0 h-full z-0 pointer-events-none flex justify-center">
+        <div className="absolute inset-x-0 top-0 bottom-0 z-0 pointer-events-none flex justify-center">
           <div className="w-[800px] h-full">
             <LightPillar
               topColor="#5227FF"
