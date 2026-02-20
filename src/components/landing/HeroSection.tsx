@@ -67,13 +67,13 @@ export function HeroSection() {
         style={{ y: bgY }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/80 to-background z-10" />
-        <div className="absolute inset-0 z-0 opacity-80 dark:opacity-60">
+        <div className="absolute inset-0 z-0 opacity-100 dark:opacity-80">
           <GridDistortion
-            imageSrc={heroBg}
-            grid={20}
+            imageSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
+            grid={24}
             mouse={0.2}
-            strength={0.12}
-            relaxation={0.94}
+            strength={0.15}
+            relaxation={0.9}
             className="w-full h-full"
           />
         </div>

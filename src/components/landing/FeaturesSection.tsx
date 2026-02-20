@@ -12,8 +12,12 @@ import {
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
+import { ColorBends } from "@/components/ui/color-bends";
 
 const features = [
+  // ... (rest of features)
+  // I will use a multi-replace if I need to change later, but for now I'll use replace_file_content for the whole block area if possible.
+  // Wait, I should use replace_file_content for a specific block.
   {
     icon: FileText,
     title: "Resume Intelligence",
@@ -85,8 +89,22 @@ export function FeaturesSection() {
 
   return (
     <section id="features" className="py-24 relative overflow-hidden">
-      {/* Background Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-accent/30 to-background pointer-events-none" />
+      {/* Background Effect */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40 dark:opacity-20">
+        <ColorBends
+          colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
+          rotation={0}
+          speed={0.2}
+          scale={1}
+          frequency={1}
+          warpStrength={1}
+          mouseInfluence={1}
+          parallax={0.5}
+          noise={0.1}
+          transparent
+        />
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-background z-[1] pointer-events-none" />
 
       <div className="container mx-auto px-4 relative z-10">
         {/* Section Header */}

@@ -97,8 +97,8 @@ const GridDistortion: React.FC<GridDistortionProps> = ({
         const size = grid;
         const data = new Float32Array(4 * size * size);
         for (let i = 0; i < size * size; i++) {
-            data[i * 4] = Math.random() * 255 - 125;
-            data[i * 4 + 1] = Math.random() * 255 - 125;
+            data[i * 4] = 0;
+            data[i * 4 + 1] = 0;
         }
 
         const dataTexture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.FloatType);
