@@ -90,7 +90,7 @@ export function FeaturesSection() {
   return (
     <section id="features" className="py-24 relative overflow-hidden">
       {/* Background Effect */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-70 dark:opacity-40">
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40 dark:opacity-20">
         <ColorBends
           colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
           rotation={0}

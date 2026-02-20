@@ -96,7 +96,7 @@ vec3 getLineColor(float t, vec3 baseColor) {
     gradientColor = mix(c1, c2, f);
   }
   
-  return gradientColor * 1.5; // Boosted vibrancy
+  return gradientColor * 0.5;
 }
 
 float wave(vec2 uv, float offset, vec2 screenUv, vec2 mouseUv, bool shouldBend, float iTime, float animationSpeed, float bendRadius, float bendStrength, float bendInfluence) {
@@ -155,7 +155,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         bendRadius,
         bendStrength,
         bendInfluence
-      );
+      ) * 0.2;
     }
   }
 
@@ -191,7 +191,18 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
       float angle = topWavePosition.z * log(length(baseUv) + 1.0);
       vec2 ruv = baseUv * rotate(angle);
       ruv.x *= -1.0;
-      ) * 0.4;
+      col += lineCol * wave(
+        ruv + vec2(topLineDistance * fi + topWavePosition.x, topWavePosition.y),
+        1.0 + 0.2 * fi,
+        baseUv,
+        mouseUv,
+        interactive,
+        iTime,
+        animationSpeed,
+        bendRadius,
+        bendStrength,
+        bendInfluence
+      ) * 0.1;
     }
   }
 
