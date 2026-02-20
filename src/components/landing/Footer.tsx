@@ -5,42 +5,32 @@ import { Link } from "react-router-dom";
 const footerLinks = {
   Product: [
     { label: "Features", href: "#features" },
+    { label: "How It Works", href: "#how-it-works" },
     { label: "Pricing", href: "#pricing" },
-    { label: "Roadmap", href: "#" },
-    { label: "Changelog", href: "#" },
-  ],
-  Company: [
-    { label: "About", href: "#" },
-    { label: "Blog", href: "#" },
-    { label: "Careers", href: "#" },
-    { label: "Press", href: "#" },
   ],
   Resources: [
-    { label: "Documentation", href: "#" },
-    { label: "Help Center", href: "#" },
-    { label: "Community", href: "#" },
-    { label: "API", href: "#" },
+    { label: "AI Career Mentor", href: "/dashboard/mentor", isRoute: true },
+    { label: "Job Search", href: "/dashboard/jobs", isRoute: true },
+    { label: "Resume Analysis", href: "/dashboard/resume", isRoute: true },
   ],
   Legal: [
-    { label: "Privacy", href: "#" },
-    { label: "Terms", href: "#" },
-    { label: "Security", href: "#" },
-    { label: "Cookies", href: "#" },
+    { label: "Privacy Policy", href: "/privacy", isRoute: true },
+    { label: "Terms of Service", href: "/terms", isRoute: true },
   ],
 };
 
 const socialLinks = [
-  { icon: Twitter, href: "#", label: "Twitter" },
-  { icon: Github, href: "#", label: "GitHub" },
-  { icon: Linkedin, href: "#", label: "LinkedIn" },
-  { icon: Mail, href: "#", label: "Email" },
+  { icon: Twitter, href: "https://twitter.com", label: "Twitter" },
+  { icon: Github, href: "https://github.com", label: "GitHub" },
+  { icon: Linkedin, href: "https://linkedin.com", label: "LinkedIn" },
+  { icon: Mail, href: "mailto:hello@ascendcareer.ai", label: "Email" },
 ];
 
 export function Footer() {
   return (
     <footer className="border-t border-border bg-card/50">
       <div className="container mx-auto px-4 py-16">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
           {/* Brand */}
           <div className="col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
@@ -51,7 +41,7 @@ export function Footer() {
               >
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </motion.div>
-              <span className="font-display font-bold text-xl">CareerPath</span>
+              <span className="font-display font-bold text-xl">Ascend Career</span>
             </Link>
             <p className="text-muted-foreground text-sm mb-6 max-w-xs">
               AI-powered career guidance that helps you navigate your professional
@@ -62,6 +52,8 @@ export function Footer() {
                 <motion.a
                   key={social.label}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-accent/80 transition-colors"
                   whileHover={{ y: -3 }}
                   aria-label={social.label}
@@ -77,14 +69,23 @@ export function Footer() {
             <div key={category}>
               <h4 className="font-semibold mb-4">{category}</h4>
               <ul className="space-y-3">
-                {links.map((link) => (
+                {links.map((link: any) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {link.label}
-                    </a>
+                    {link.isRoute ? (
+                      <Link
+                        to={link.href}
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={link.href}
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -95,15 +96,15 @@ export function Footer() {
         {/* Bottom */}
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} CareerPath AI. All rights reserved.
+            © {new Date().getFullYear()} Ascend Career. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <a href="#" className="hover:text-foreground transition-colors">
+            <Link to="/privacy" className="hover:text-foreground transition-colors">
               Privacy Policy
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors">
+            </Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">
               Terms of Service
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -51,7 +51,7 @@ export function HowItWorksSection() {
           className="text-center max-w-3xl mx-auto mb-16"
         >
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold mb-6">
-            How <GradientText>CareerPath</GradientText> Works
+            How <GradientText>Ascend Career</GradientText> Works
           </h2>
           <p className="text-lg text-muted-foreground">
             Get started in minutes with our streamlined AI-powered process.

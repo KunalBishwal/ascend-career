@@ -1,18 +1,47 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles, User, Bot, Loader2, RefreshCw } from "lucide-react";
+import { Send, User, Bot, Copy, Check, RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
-import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
 import { AnimatedButton } from "@/components/ui/animated-button";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { useAuth } from "@/contexts/AuthContext";
+import LiquidEther from "@/components/LiquidEther/LiquidEther";
+import { ChatHistorySidebar } from "@/components/mentor/ChatHistorySidebar";
+import { useMentorChats } from "@/hooks/useMentorChats";
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
+// ── Copy button for code blocks ──────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="absolute top-2 right-2 p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+// ── Animated typing indicator ────────────────────────────────────────────────
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-1.5">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="w-2 h-2 rounded-full bg-primary"
+          animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 0.8, delay: i * 0.15, repeat: Infinity }}
+        />
+      ))}
+    </div>
+  );
 }
 
 const suggestedPrompts = [
@@ -22,324 +51,353 @@ const suggestedPrompts = [
   "Review my career progression plan",
 ];
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content:
-      "Hello! I'm your AI Career Mentor. I'm here to help you navigate your professional journey with personalized advice, interview preparation, and career strategy. What would you like to discuss today?",
-    timestamp: new Date(),
-  },
-];
-
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/career-mentor`;
-
+// ── Main page ────────────────────────────────────────────────────────────────
 export default function AIMentor() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { user } = useAuth();
+  const displayName = user?.displayName || "User";
+  const firstName = displayName.split(" ")[0];
+
+  const {
+    sessions,
+    sessionsLoading,
+    activeSessionId,
+    messages,
+    isLoading,
+    startNewChat,
+    loadSession,
+    deleteSession,
+    sendMessage,
+  } = useMentorChats();
+
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Auto-scroll
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const streamChat = async (userMessages: { role: string; content: string }[]) => {
-    setIsLoading(true);
-    let assistantContent = "";
-
-    try {
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ messages: userMessages }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to get response: ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-
-      // Add initial assistant message
-      const assistantId = Date.now().toString();
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
-      ]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: assistantContent } : m
-                )
-              );
-            }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
-        }
-      }
-
-      // Final flush
-      if (textBuffer.trim()) {
-        for (let raw of textBuffer.split("\n")) {
-          if (!raw) continue;
-          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-          if (raw.startsWith(":") || raw.trim() === "") continue;
-          if (!raw.startsWith("data: ")) continue;
-          const jsonStr = raw.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: assistantContent } : m
-                )
-              );
-            }
-          } catch {
-            /* ignore partial leftovers */
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Chat error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to get response";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: `I'm sorry, I encountered an error: ${errorMessage}. Please try again.`,
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+  // Auto-resize textarea
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!input.trim() || isLoading) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    sendMessage(input.trim());
     setInput("");
-
-    // Build message history for API (excluding the initial greeting)
-    const apiMessages = [...messages.slice(1), userMessage].map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    await streamChat(apiMessages);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
-  const resetChat = () => {
-    setMessages(initialMessages);
-  };
-
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-8rem)] flex flex-col">
+      <div className="h-full flex flex-col gap-4 p-6 overflow-hidden">
+
         {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          className="flex items-center justify-between flex-shrink-0"
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent-foreground flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-display font-bold">
-                  <GradientText>AI Career Mentor</GradientText>
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Powered by Gemini AI
-                </p>
-              </div>
-            </div>
-            <AnimatedButton variant="ghost" size="sm" onClick={resetChat}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              New Chat
-            </AnimatedButton>
+          <div>
+            <h1 className="text-2xl font-display font-bold">
+              <GradientText>AI Career Mentor</GradientText>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Powered by Gemini AI · Your personal career advisor
+            </p>
           </div>
+          <AnimatedButton
+            variant="outline"
+            size="sm"
+            onClick={startNewChat}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            New Chat
+          </AnimatedButton>
         </motion.div>
 
-        {/* Chat Container */}
-        <GlassCard className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-            <AnimatePresence initial={false}>
-              {messages.map((message) => (
+        {/* Main body: sidebar + chat */}
+        <div className="flex flex-1 gap-3 min-h-0">
+
+          {/* ── Chat History Sidebar ─────────────────────────── */}
+          <ChatHistorySidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            loading={sessionsLoading}
+            onNewChat={startNewChat}
+            onLoadSession={loadSession}
+            onDeleteSession={deleteSession}
+          />
+
+          {/* ── Chat area ────────────────────────────────────── */}
+          <div className="relative flex-1 min-w-0 flex flex-col min-h-0 overflow-hidden rounded-2xl border border-border bg-card/40 backdrop-blur-md">
+
+            {/* LiquidEther background — z-0 */}
+            <div className="absolute inset-0 z-0 opacity-30 dark:opacity-20 pointer-events-none overflow-hidden">
+              <LiquidEther
+                colors={["#5227FF", "#FF9FFC", "#B19EEF"]}
+                mouseForce={20}
+                cursorSize={100}
+                isViscous
+                viscous={30}
+                iterationsViscous={32}
+                iterationsPoisson={32}
+                resolution={0.5}
+                isBounce={false}
+                autoDemo
+                autoSpeed={0.5}
+                autoIntensity={2.2}
+                takeoverDuration={0.25}
+                autoResumeDelay={3000}
+                autoRampDuration={0.6}
+              />
+            </div>
+
+            {/* Username watermark — z-1 */}
+            <div className="absolute inset-0 z-[1] flex items-center justify-center pointer-events-none overflow-hidden">
+              <motion.span
+                className="text-[8rem] md:text-[12rem] font-display font-black text-foreground/[0.025] select-none whitespace-nowrap leading-none"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 1.5 }}
+              >
+                {firstName}
+              </motion.span>
+            </div>
+
+            {/* Messages — z-10 */}
+            <div className="relative z-10 flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+              <AnimatePresence initial={false}>
+                {messages.map((message) => (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 15, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ type: "spring", damping: 20, stiffness: 200 }}
+                    className={cn(
+                      "flex gap-3",
+                      message.role === "user" ? "flex-row-reverse" : ""
+                    )}
+                  >
+                    {/* Avatar */}
+                    <motion.div
+                      className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg",
+                        message.role === "user"
+                          ? "bg-gradient-to-br from-primary to-accent-foreground"
+                          : "bg-gradient-to-br from-violet-600 to-purple-500"
+                      )}
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                    >
+                      {message.role === "user" ? (
+                        <User className="w-4 h-4 text-white" />
+                      ) : (
+                        <Bot className="w-4 h-4 text-white" />
+                      )}
+                    </motion.div>
+
+                    {/* Bubble */}
+                    <div
+                      className={cn(
+                        "max-w-[80%] rounded-2xl relative group",
+                        message.role === "user"
+                          ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground px-5 py-3 shadow-lg shadow-primary/20"
+                          : "bg-card/80 backdrop-blur-sm border border-border/50 px-6 py-5 shadow-lg"
+                      )}
+                    >
+                      {/* Label */}
+                      <p className={cn(
+                        "text-[10px] font-semibold uppercase tracking-wider mb-1.5",
+                        message.role === "user"
+                          ? "text-primary-foreground/60"
+                          : "text-primary/70"
+                      )}>
+                        {message.role === "user" ? firstName : "Mentor AI"}
+                      </p>
+
+                      {/* Content */}
+                      {message.role === "assistant" ? (
+                        <div className="text-sm text-foreground/90 leading-relaxed">
+                          <ReactMarkdown
+                            components={{
+                              h1: ({ children }) => (
+                                <h1 className="text-xl font-bold text-foreground mt-6 mb-3 pb-1.5 border-b border-border/40 first:mt-0">{children}</h1>
+                              ),
+                              h2: ({ children }) => (
+                                <h2 className="text-lg font-semibold text-foreground mt-5 mb-2.5 first:mt-0">{children}</h2>
+                              ),
+                              h3: ({ children }) => (
+                                <h3 className="text-base font-semibold text-primary/90 mt-4 mb-2 first:mt-0">{children}</h3>
+                              ),
+                              p: ({ children }) => (
+                                <p className="text-sm leading-7 text-foreground/85 mb-4 last:mb-0">{children}</p>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="my-3 space-y-2 pl-1">{children}</ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="my-3 space-y-2 pl-1 list-none">{children}</ol>
+                              ),
+                              li: ({ children, ...props }: any) => (
+                                <li className="flex gap-3 items-start text-sm leading-6 text-foreground/85">
+                                  {props.ordered ? (
+                                    <span className="flex-shrink-0 w-5 h-5 mt-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center">
+                                      {(props.index ?? 0) + 1}
+                                    </span>
+                                  ) : (
+                                    <span className="flex-shrink-0 mt-[0.45rem] w-1.5 h-1.5 rounded-full bg-primary/60" />
+                                  )}
+                                  <span className="flex-1">{children}</span>
+                                </li>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-semibold text-foreground">{children}</strong>
+                              ),
+                              em: ({ children }) => (
+                                <em className="italic text-foreground/75">{children}</em>
+                              ),
+                              blockquote: ({ children }) => (
+                                <blockquote className="my-4 pl-4 py-3 border-l-2 border-primary/50 bg-primary/5 rounded-r-xl text-foreground/75 italic text-sm">
+                                  {children}
+                                </blockquote>
+                              ),
+                              hr: () => <div className="my-5 border-t border-border/30" />,
+                              code: ({ className, children, ...props }) => {
+                                const isInline = !className;
+                                if (isInline) {
+                                  return (
+                                    <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded-md text-xs font-mono" {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                                return <code className={cn("text-sm", className)} {...props}>{children}</code>;
+                              },
+                              pre: ({ children, ...props }) => {
+                                const text = (children as any)?.props?.children ?? "";
+                                return (
+                                  <div className="relative group my-4">
+                                    <CopyButton text={String(text)} />
+                                    <pre {...props} className="!bg-[#1a1b26] !text-sm !p-5 !rounded-2xl overflow-x-auto border border-white/10">
+                                      {children}
+                                    </pre>
+                                  </div>
+                                );
+                              },
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-line text-sm leading-relaxed">
+                          {message.content}
+                        </p>
+                      )}
+
+                      {/* Timestamp */}
+                      <p className={cn(
+                        "text-[10px] mt-2 opacity-50",
+                        message.role === "user" ? "text-primary-foreground/50" : "text-muted-foreground"
+                      )}>
+                        {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {/* Typing indicator — show when streaming placeholder has empty content */}
+              {isLoading && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content === "" && (
                 <motion.div
-                  key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className={cn(
-                    "flex gap-3",
-                    message.role === "user" ? "flex-row-reverse" : ""
-                  )}
+                  className="flex gap-3"
                 >
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                      message.role === "user"
-                        ? "bg-gradient-to-br from-primary to-accent-foreground"
-                        : "bg-accent"
-                    )}
-                  >
-                    {message.role === "user" ? (
-                      <User className="w-4 h-4 text-primary-foreground" />
-                    ) : (
-                      <Bot className="w-4 h-4 text-primary" />
-                    )}
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-purple-500 flex items-center justify-center shadow-lg">
+                    <Bot className="w-4 h-4 text-white" />
                   </div>
-                  <div
-                    className={cn(
-                      "max-w-[80%] rounded-2xl p-4",
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-accent"
-                    )}
-                  >
-                    {message.role === "assistant" ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-line text-sm leading-relaxed">
-                        {message.content}
-                      </p>
-                    )}
+                  <div className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-2xl px-5 py-4 shadow-lg">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 text-primary/70">
+                      Mentor AI
+                    </p>
+                    <TypingIndicator />
                   </div>
                 </motion.div>
-              ))}
-            </AnimatePresence>
+              )}
 
-            {isLoading && messages[messages.length - 1]?.content === "" && (
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Suggested prompts — only in fresh chat (single greeting, not loading a session) */}
+            {messages.length === 1 && messages[0]?.id === "greeting" && !isLoading && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex gap-3"
+                className="relative z-10 px-6 pb-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
               >
-                <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-primary" />
-                </div>
-                <div className="bg-accent rounded-2xl p-4">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    <span className="text-sm text-muted-foreground">Thinking...</span>
-                  </div>
+                <p className="text-xs text-muted-foreground mb-2.5 font-medium">
+                  ✨ Quick suggestions
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedPrompts.map((prompt, i) => (
+                    <motion.button
+                      key={prompt}
+                      onClick={() => setInput(prompt)}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.35 + i * 0.07 }}
+                      className="px-4 py-2 rounded-xl bg-card/60 backdrop-blur border border-border/50 text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-all"
+                    >
+                      {prompt}
+                    </motion.button>
+                  ))}
                 </div>
               </motion.div>
             )}
 
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Suggested Prompts */}
-          {messages.length === 1 && (
-            <div className="px-4 pb-4">
-              <p className="text-xs text-muted-foreground mb-2">Suggested questions:</p>
-              <div className="flex flex-wrap gap-2">
-                {suggestedPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    onClick={() => setInput(prompt)}
-                    className="px-3 py-1.5 rounded-full bg-accent hover:bg-accent/80 text-sm transition-colors"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div className="border-t border-border p-4">
-            <div className="flex items-end gap-3">
-              <div className="flex-1 relative">
+            {/* Input area — z-10 */}
+            <div className="relative z-10 px-4 pb-4 pt-2 border-t border-border/30">
+              <div className="flex gap-3 items-end bg-card/70 backdrop-blur border border-border/60 rounded-2xl px-4 py-3 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all shadow-lg">
                 <textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
+                  onChange={handleInput}
+                  onKeyDown={handleKeyDown}
                   placeholder="Ask me anything about your career..."
-                  className="w-full min-h-[48px] max-h-32 px-4 py-3 rounded-xl bg-accent/50 border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
                   rows={1}
+                  className="flex-1 bg-transparent resize-none outline-none text-sm text-foreground placeholder:text-muted-foreground/60 leading-relaxed max-h-40 overflow-y-auto scrollbar-hide"
                 />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0 shadow-lg shadow-primary/30"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
-              <AnimatedButton
-                variant="hero"
-                size="icon"
-                className="w-12 h-12 rounded-xl"
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-              >
-                <Send className="w-5 h-5" />
-              </AnimatedButton>
+              <p className="text-center text-[10px] text-muted-foreground/40 mt-2">
+                Press Enter to send · Shift+Enter for new line
+              </p>
             </div>
           </div>
-        </GlassCard>
+        </div>
       </div>
     </DashboardLayout>
   );

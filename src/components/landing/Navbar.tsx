@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles } from "lucide-react";
+import { Menu, X, Sparkles, LayoutDashboard, LogOut } from "lucide-react";
 import { AnimatedButton } from "@/components/ui/animated-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { signOut } from "@/integrations/firebase/auth";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -16,6 +18,8 @@ const navLinks = [
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,6 +28,12 @@ export function Navbar() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setIsMobileMenuOpen(false);
+    navigate("/login");
+  };
 
   return (
     <>
@@ -49,7 +59,7 @@ export function Navbar() {
               >
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </motion.div>
-              <span className="font-display font-bold text-xl">CareerPath</span>
+              <span className="font-display font-bold text-xl">Ascend Career</span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -70,25 +80,45 @@ export function Navbar() {
             {/* Desktop CTA */}
             <div className="hidden md:flex items-center gap-4">
               <ThemeToggle />
-              <Link to="/dashboard">
-                <AnimatedButton variant="ghost">Sign In</AnimatedButton>
-              </Link>
-              <Link to="/dashboard">
-                <AnimatedButton variant="hero">Get Started</AnimatedButton>
-              </Link>
+              {!loading && user ? (
+                <>
+                  <Link to="/dashboard">
+                    <AnimatedButton variant="hero">
+                      <LayoutDashboard className="w-4 h-4 mr-2" />
+                      Dashboard
+                    </AnimatedButton>
+                  </Link>
+                  <AnimatedButton variant="ghost" onClick={handleSignOut}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </AnimatedButton>
+                </>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <AnimatedButton variant="ghost">Sign In</AnimatedButton>
+                  </Link>
+                  <Link to="/login">
+                    <AnimatedButton variant="hero">Get Started</AnimatedButton>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
-            <button
-              className="md:hidden p-2"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
+            <div className="flex items-center gap-2 md:hidden">
+              <ThemeToggle />
+              <button
+                className="p-2"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="w-6 h-6" />
+                ) : (
+                  <Menu className="w-6 h-6" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </motion.nav>
@@ -114,19 +144,33 @@ export function Navbar() {
                 </a>
               ))}
               <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                <div className="flex justify-center py-2">
-                  <ThemeToggle />
-                </div>
-                <Link to="/dashboard">
-                  <AnimatedButton variant="ghost" className="w-full">
-                    Sign In
-                  </AnimatedButton>
-                </Link>
-                <Link to="/dashboard">
-                  <AnimatedButton variant="hero" className="w-full">
-                    Get Started
-                  </AnimatedButton>
-                </Link>
+                {!loading && user ? (
+                  <>
+                    <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                      <AnimatedButton variant="hero" className="w-full">
+                        <LayoutDashboard className="w-4 h-4 mr-2" />
+                        Dashboard
+                      </AnimatedButton>
+                    </Link>
+                    <AnimatedButton variant="ghost" className="w-full" onClick={handleSignOut}>
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </AnimatedButton>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                      <AnimatedButton variant="ghost" className="w-full">
+                        Sign In
+                      </AnimatedButton>
+                    </Link>
+                    <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                      <AnimatedButton variant="hero" className="w-full">
+                        Get Started
+                      </AnimatedButton>
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

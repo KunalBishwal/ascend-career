@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -9,13 +9,24 @@ import {
   Sparkles,
   AlertCircle,
   Download,
+  GraduationCap,
+  FolderKanban,
+  Award,
+  Briefcase,
+  User,
+  TrendingUp,
+  ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedButton } from "@/components/ui/animated-button";
 import { GradientText } from "@/components/ui/gradient-text";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { analyzeResume as geminiAnalyzeResume } from "@/integrations/firebase/gemini";
+import { saveResumeAnalysis } from "@/integrations/firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
+// Interfaces matching the new Gemini response schema
 interface ExtractedSkill {
   name: string;
   level: "Beginner" | "Intermediate" | "Advanced" | "Expert";
@@ -30,20 +41,184 @@ interface CareerRecommendation {
   salaryRange: string;
 }
 
+interface Education {
+  degree: string;
+  field: string;
+  institution: string;
+  graduationDate: string;
+  gpa: string | null;
+}
+
+interface Project {
+  name: string;
+  description: string;
+  technologies: string[];
+  highlights: string[];
+}
+
+interface Certification {
+  name: string;
+  issuer: string;
+  date: string | null;
+}
+
+interface ATSBreakdown {
+  formatting: number;
+  keywords: number;
+  actionVerbs: number;
+  quantification: number;
+}
+
 interface ResumeAnalysis {
+  atsScore: number;
+  atsBreakdown: ATSBreakdown;
+  atsSuggestions: string[];
+  about: string;
+  experienceMonths: number;
+  experienceLabel: string;
+  education: Education[];
+  projects: Project[];
+  certifications: Certification[];
   skills: ExtractedSkill[];
+  topStrengths: string[];
   recommendations: CareerRecommendation[];
   summary: string;
-  yearsOfExperience: number;
-  topStrengths: string[];
+}
+
+interface RecommendedJob {
+  id: string;
+  title: string;
+  organization: string;
+  location: string;
+  salary: string;
+  url: string;
+  type: string;
+  source: string;
+}
+
+// ATS Score circular gauge component
+function ATSGauge({ score }: { score: number }) {
+  const radius = 58;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (score / 100) * circumference;
+  const color =
+    score >= 75 ? "#22c55e" : score >= 50 ? "#eab308" : "#ef4444";
+
+  return (
+    <div className="relative w-40 h-40 mx-auto">
+      <svg className="w-full h-full -rotate-90" viewBox="0 0 128 128">
+        <circle
+          cx="64"
+          cy="64"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="8"
+          fill="none"
+          className="text-muted/20"
+        />
+        <motion.circle
+          cx="64"
+          cy="64"
+          r={radius}
+          stroke={color}
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: circumference - progress }}
+          transition={{ duration: 1.5, ease: "easeOut" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <motion.span
+          className="text-3xl font-display font-bold"
+          style={{ color }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          {score}
+        </motion.span>
+        <span className="text-xs text-muted-foreground">ATS Score</span>
+      </div>
+    </div>
+  );
+}
+
+// Fetch recommended jobs from Active Jobs DB API
+async function fetchRecommendedJobs(
+  skills: string[],
+  title?: string
+): Promise<RecommendedJob[]> {
+  const rapidApiKey = import.meta.env.VITE_RAPIDAPI_KEY;
+  if (!rapidApiKey) return [];
+
+  const query = title || skills.slice(0, 3).join(" ");
+
+  try {
+    const response = await fetch(
+      `https://active-jobs-db.p.rapidapi.com/active-ats-7d?title=${encodeURIComponent(query)}&limit=6`,
+      {
+        headers: {
+          "x-rapidapi-host": "active-jobs-db.p.rapidapi.com",
+          "x-rapidapi-key": rapidApiKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn("Active Jobs DB error:", response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((job: any) => ({
+      id: job.id || Math.random().toString(),
+      title: job.title || "Untitled",
+      organization: job.organization || "Unknown Company",
+      location:
+        job.locations_derived?.[0] ||
+        job.locations_raw?.[0]?.address?.addressLocality ||
+        "Not specified",
+      salary: job.salary_raw?.value
+        ? `${job.salary_raw.currency || "USD"} ${job.salary_raw.value.minValue || ""}${job.salary_raw.value.maxValue ? `–${job.salary_raw.value.maxValue}` : ""} / ${job.salary_raw.value.unitText?.toLowerCase() || "year"}`
+        : "Not disclosed",
+      url: job.url || "#",
+      type: Array.isArray(job.employment_type)
+        ? job.employment_type[0]
+        : job.employment_type || "Full-time",
+      source: job.source || "ATS",
+    }));
+  } catch (err) {
+    console.error("Failed to fetch recommended jobs:", err);
+    return [];
+  }
 }
 
 export function ResumeUpload() {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ResumeAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recommendedJobs, setRecommendedJobs] = useState<RecommendedJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+
+  // Fetch jobs when analysis is complete
+  useEffect(() => {
+    if (analysis && analysis.skills.length > 0) {
+      setLoadingJobs(true);
+      const topSkills = analysis.skills.slice(0, 5).map((s) => s.name);
+      const topRole = analysis.recommendations?.[0]?.role;
+      fetchRecommendedJobs(topSkills, topRole)
+        .then(setRecommendedJobs)
+        .finally(() => setLoadingJobs(false));
+    }
+  }, [analysis]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -84,7 +259,6 @@ export function ResumeUpload() {
     setError(null);
 
     try {
-      // Convert file to base64
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => {
@@ -95,20 +269,30 @@ export function ResumeUpload() {
       reader.readAsDataURL(file);
       const base64Content = await base64Promise;
 
-      // Call edge function to analyze resume
-      const { data, error: fnError } = await supabase.functions.invoke("analyze-resume", {
-        body: { 
-          fileContent: base64Content,
-          fileName: file.name 
-        },
-      });
-
-      if (fnError) throw fnError;
-
+      const data = await geminiAnalyzeResume(base64Content, file.name);
       setAnalysis(data);
+
+      // Persist to Firestore so Career Roadmap & History can use it
+      if (user?.uid) {
+        try {
+          await saveResumeAnalysis(user.uid, {
+            ...data,
+            fileName: file.name,
+            analyzedAt: new Date().toISOString(),
+          });
+          console.log("Resume analysis saved to Firestore");
+        } catch (saveErr) {
+          console.error("Failed to save analysis to Firestore:", saveErr);
+          // Non-fatal — user still sees the analysis
+        }
+      }
     } catch (err) {
       console.error("Error analyzing resume:", err);
-      setError("Failed to analyze resume. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to analyze resume. Please try again."
+      );
     } finally {
       setIsAnalyzing(false);
     }
@@ -118,6 +302,7 @@ export function ResumeUpload() {
     setFile(null);
     setAnalysis(null);
     setError(null);
+    setRecommendedJobs([]);
   };
 
   return (
@@ -133,7 +318,7 @@ export function ResumeUpload() {
               <GradientText>AI Resume Analysis</GradientText>
             </h2>
             <p className="text-sm text-muted-foreground">
-              Upload your resume for AI-powered skill extraction
+              Upload your resume for ATS scoring, skill extraction & job recommendations
             </p>
           </div>
         </div>
@@ -224,7 +409,7 @@ export function ResumeUpload() {
             animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-2 mt-4 p-3 rounded-xl bg-destructive/10 text-destructive"
           >
-            <AlertCircle className="w-4 h-4" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <p className="text-sm">{error}</p>
           </motion.div>
         )}
@@ -239,113 +424,430 @@ export function ResumeUpload() {
             exit={{ opacity: 0, y: -20 }}
             className="space-y-6"
           >
-            {/* Summary */}
-            <GlassCard glow glowColor="purple">
-              <div className="flex items-center gap-2 mb-4">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                <h3 className="font-semibold">Analysis Complete</h3>
-              </div>
-              <p className="text-muted-foreground mb-4">{analysis.summary}</p>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span className="px-3 py-1 rounded-full bg-primary/10 text-primary">
-                  {analysis.yearsOfExperience} years experience
-                </span>
-                <span className="px-3 py-1 rounded-full bg-accent text-accent-foreground">
-                  {analysis.skills.length} skills identified
-                </span>
-              </div>
-            </GlassCard>
+            {/* ATS Score + Summary Row */}
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* ATS Score */}
+              <GlassCard glow glowColor="purple" className="md:col-span-1">
+                <h3 className="font-semibold text-center mb-4 flex items-center justify-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  ATS Score
+                </h3>
+                <ATSGauge score={analysis.atsScore} />
+                <div className="mt-4 space-y-2">
+                  {analysis.atsBreakdown && (
+                    <>
+                      {[
+                        { label: "Formatting", value: analysis.atsBreakdown.formatting, max: 25 },
+                        { label: "Keywords", value: analysis.atsBreakdown.keywords, max: 25 },
+                        { label: "Action Verbs", value: analysis.atsBreakdown.actionVerbs, max: 25 },
+                        { label: "Quantification", value: analysis.atsBreakdown.quantification, max: 25 },
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-24 flex-shrink-0">{item.label}</span>
+                          <div className="flex-1 h-2 rounded-full bg-accent/50 overflow-hidden">
+                            <motion.div
+                              className="h-full rounded-full bg-gradient-to-r from-primary to-accent-foreground"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${(item.value / item.max) * 100}%` }}
+                              transition={{ delay: 0.5, duration: 1 }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium w-8 text-right">{item.value}/{item.max}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </GlassCard>
+
+              {/* Summary & Quick Stats */}
+              <GlassCard className="md:col-span-2">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <h3 className="font-semibold">Analysis Complete</h3>
+                </div>
+
+                {/* About / Summary */}
+                <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
+                  {analysis.about || analysis.summary}
+                </p>
+
+                <div className="flex flex-wrap gap-3 text-sm mb-4">
+                  <span className="px-3 py-1.5 rounded-full bg-primary/10 text-primary font-medium">
+                    📊 {analysis.experienceLabel || `${analysis.experienceMonths} months`}
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full bg-accent text-accent-foreground font-medium">
+                    🛠 {analysis.skills?.length || 0} skills
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full bg-green-500/10 text-green-500 font-medium">
+                    🎓 {analysis.education?.length || 0} education
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 font-medium">
+                    📁 {analysis.projects?.length || 0} projects
+                  </span>
+                  {(analysis.certifications?.length || 0) > 0 && (
+                    <span className="px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-500 font-medium">
+                      🏅 {analysis.certifications.length} certifications
+                    </span>
+                  )}
+                </div>
+
+                {/* ATS Suggestions */}
+                {analysis.atsSuggestions && analysis.atsSuggestions.length > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                    <p className="text-xs font-semibold text-amber-400 mb-2">💡 Improvement Suggestions</p>
+                    <ul className="space-y-1">
+                      {analysis.atsSuggestions.slice(0, 4).map((s, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                          <ChevronRight className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-400" />
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </GlassCard>
+            </div>
+
+            {/* Education */}
+            {analysis.education && analysis.education.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-primary" />
+                  Education
+                </h3>
+                <div className="space-y-3">
+                  {analysis.education.map((edu, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="p-4 rounded-xl bg-accent/30 border border-border"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-medium">{edu.degree}{edu.field ? ` in ${edu.field}` : ""}</h4>
+                          <p className="text-sm text-muted-foreground">{edu.institution}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm text-primary">{edu.graduationDate}</p>
+                          {edu.gpa && <p className="text-xs text-muted-foreground">GPA: {edu.gpa}</p>}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Projects */}
+            {analysis.projects && analysis.projects.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <FolderKanban className="w-5 h-5 text-primary" />
+                  Projects
+                </h3>
+                <div className="space-y-4">
+                  {analysis.projects.map((project, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="p-4 rounded-xl bg-accent/30 border border-border"
+                    >
+                      <h4 className="font-medium mb-1">{project.name}</h4>
+                      <p className="text-sm text-muted-foreground mb-3">{project.description}</p>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {project.technologies.map((tech) => (
+                          <span
+                            key={tech}
+                            className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                          >
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                      {project.highlights && project.highlights.length > 0 && (
+                        <ul className="space-y-1 mt-2">
+                          {project.highlights.map((h, i) => (
+                            <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                              <span className="text-primary">•</span> {h}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Certifications */}
+            {analysis.certifications && analysis.certifications.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-primary" />
+                  Certifications
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {analysis.certifications.map((cert, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="p-3 rounded-xl bg-accent/30 border border-border flex items-center gap-3"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                        <Award className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{cert.name}</p>
+                        <p className="text-xs text-muted-foreground">{cert.issuer}{cert.date ? ` · ${cert.date}` : ""}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
 
             {/* Top Strengths */}
-            <GlassCard>
-              <h3 className="font-semibold mb-4">Top Strengths</h3>
-              <div className="flex flex-wrap gap-2">
-                {analysis.topStrengths.map((strength, index) => (
-                  <motion.span
-                    key={strength}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary/10 to-accent-foreground/10 text-sm font-medium"
-                  >
-                    {strength}
-                  </motion.span>
-                ))}
-              </div>
-            </GlassCard>
+            {analysis.topStrengths && analysis.topStrengths.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                  Top Strengths
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {analysis.topStrengths.map((strength, index) => (
+                    <motion.span
+                      key={strength}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="px-3 py-1.5 rounded-full bg-gradient-to-r from-primary/10 to-accent-foreground/10 text-sm font-medium"
+                    >
+                      {strength}
+                    </motion.span>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
 
             {/* Extracted Skills */}
-            <GlassCard>
-              <h3 className="font-semibold mb-4">Extracted Skills</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                {analysis.skills.map((skill, index) => (
-                  <motion.div
-                    key={skill.name}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-center justify-between p-3 rounded-xl bg-accent/30"
-                  >
-                    <div>
-                      <p className="font-medium">{skill.name}</p>
-                      <p className="text-xs text-muted-foreground">{skill.category}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-xs font-medium",
-                        skill.level === "Expert" && "bg-purple-500/10 text-purple-500",
-                        skill.level === "Advanced" && "bg-blue-500/10 text-blue-500",
-                        skill.level === "Intermediate" && "bg-amber-500/10 text-amber-500",
-                        skill.level === "Beginner" && "bg-green-500/10 text-green-500"
-                      )}
+            {analysis.skills && analysis.skills.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Extracted Skills ({analysis.skills.length})
+                </h3>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {analysis.skills.map((skill, index) => (
+                    <motion.div
+                      key={skill.name}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.03 }}
+                      className="flex items-center justify-between p-3 rounded-xl bg-accent/30"
                     >
-                      {skill.level}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
-            </GlassCard>
+                      <div>
+                        <p className="font-medium text-sm">{skill.name}</p>
+                        <p className="text-xs text-muted-foreground">{skill.category}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-xs font-medium",
+                          skill.level === "Expert" && "bg-purple-500/10 text-purple-500",
+                          skill.level === "Advanced" && "bg-blue-500/10 text-blue-500",
+                          skill.level === "Intermediate" && "bg-amber-500/10 text-amber-500",
+                          skill.level === "Beginner" && "bg-green-500/10 text-green-500"
+                        )}
+                      >
+                        {skill.level}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
 
             {/* Career Recommendations */}
-            <GlassCard>
-              <h3 className="font-semibold mb-4">Career Recommendations</h3>
-              <div className="space-y-4">
-                {analysis.recommendations.map((rec, index) => (
-                  <motion.div
-                    key={rec.role}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="p-4 rounded-xl bg-accent/30 border border-border"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-semibold">{rec.role}</h4>
-                        <p className="text-sm text-primary">{rec.salaryRange}</p>
-                      </div>
-                      <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                        {rec.matchScore}% match
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">{rec.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {rec.requiredSkills.map((skill) => (
-                        <span
-                          key={skill}
-                          className="px-2 py-0.5 rounded-full bg-accent text-xs"
-                        >
-                          {skill}
+            {analysis.recommendations && analysis.recommendations.length > 0 && (
+              <GlassCard>
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  Career Recommendations
+                </h3>
+                <div className="space-y-4">
+                  {analysis.recommendations.map((rec, index) => (
+                    <motion.div
+                      key={rec.role}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="p-4 rounded-xl bg-accent/30 border border-border"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold">{rec.role}</h4>
+                          <p className="text-sm text-primary">{rec.salaryRange}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                          {rec.matchScore}% match
                         </span>
-                      ))}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">{rec.description}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {rec.requiredSkills.map((skill) => (
+                          <span
+                            key={skill}
+                            className="px-2 py-0.5 rounded-full bg-accent text-xs"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Real Job Recommendations from API */}
+            <GlassCard>
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-primary" />
+                Recommended Jobs for You
+              </h3>
+              {loadingJobs ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Finding matching jobs...
+                </div>
+              ) : recommendedJobs.length > 0 ? (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {recommendedJobs.map((job, index) => (
+                    <motion.a
+                      key={job.id}
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.08 }}
+                      className="block p-4 rounded-xl bg-accent/30 border border-border hover:border-primary/50 transition-all group"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-medium text-sm group-hover:text-primary transition-colors line-clamp-2">
+                          {job.title}
+                        </h4>
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary flex-shrink-0 mt-0.5 ml-2" />
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">{job.organization}</p>
+                      <p className="text-xs text-muted-foreground mb-2">📍 {job.location}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-primary font-medium">{job.salary}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground">
+                          {job.type}
+                        </span>
+                      </div>
+                    </motion.a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No matching jobs found. Try refining your resume or check the Jobs page for more listings.
+                </p>
+              )}
             </GlassCard>
 
             {/* Actions */}
             <div className="flex gap-4">
-              <AnimatedButton variant="hero" className="flex-1">
+              <AnimatedButton
+                variant="hero"
+                className="flex-1"
+                onClick={() => {
+                  if (!analysis) return;
+                  const lines: string[] = [];
+                  lines.push("═══════════════════════════════════════");
+                  lines.push("       RESUME ANALYSIS REPORT");
+                  lines.push("       Generated by Ascend Career");
+                  lines.push("═══════════════════════════════════════");
+                  lines.push("");
+                  lines.push(`ATS SCORE: ${analysis.atsScore}/100`);
+                  if (analysis.atsBreakdown) {
+                    lines.push(`  Formatting:     ${analysis.atsBreakdown.formatting}/25`);
+                    lines.push(`  Keywords:       ${analysis.atsBreakdown.keywords}/25`);
+                    lines.push(`  Action Verbs:   ${analysis.atsBreakdown.actionVerbs}/25`);
+                    lines.push(`  Quantification: ${analysis.atsBreakdown.quantification}/25`);
+                  }
+                  lines.push("");
+                  lines.push("── ABOUT ──");
+                  lines.push(analysis.about || analysis.summary || "N/A");
+                  lines.push("");
+                  lines.push(`Experience: ${analysis.experienceLabel || `${analysis.experienceMonths} months`}`);
+                  lines.push("");
+                  if (analysis.education?.length) {
+                    lines.push("── EDUCATION ──");
+                    analysis.education.forEach((e) => {
+                      lines.push(`• ${e.degree}${e.field ? ` in ${e.field}` : ""} — ${e.institution} (${e.graduationDate})${e.gpa ? ` | GPA: ${e.gpa}` : ""}`);
+                    });
+                    lines.push("");
+                  }
+                  if (analysis.projects?.length) {
+                    lines.push("── PROJECTS ──");
+                    analysis.projects.forEach((p) => {
+                      lines.push(`• ${p.name}`);
+                      lines.push(`  ${p.description}`);
+                      lines.push(`  Tech: ${p.technologies.join(", ")}`);
+                      if (p.highlights?.length) p.highlights.forEach((h) => lines.push(`  - ${h}`));
+                    });
+                    lines.push("");
+                  }
+                  if (analysis.certifications?.length) {
+                    lines.push("── CERTIFICATIONS ──");
+                    analysis.certifications.forEach((c) => {
+                      lines.push(`• ${c.name} — ${c.issuer}${c.date ? ` (${c.date})` : ""}`);
+                    });
+                    lines.push("");
+                  }
+                  if (analysis.skills?.length) {
+                    lines.push("── SKILLS ──");
+                    analysis.skills.forEach((s) => {
+                      lines.push(`• ${s.name} [${s.level}] — ${s.category}`);
+                    });
+                    lines.push("");
+                  }
+                  if (analysis.topStrengths?.length) {
+                    lines.push("── TOP STRENGTHS ──");
+                    analysis.topStrengths.forEach((s) => lines.push(`• ${s}`));
+                    lines.push("");
+                  }
+                  if (analysis.atsSuggestions?.length) {
+                    lines.push("── IMPROVEMENT SUGGESTIONS ──");
+                    analysis.atsSuggestions.forEach((s) => lines.push(`→ ${s}`));
+                    lines.push("");
+                  }
+                  if (analysis.recommendations?.length) {
+                    lines.push("── CAREER RECOMMENDATIONS ──");
+                    analysis.recommendations.forEach((r) => {
+                      lines.push(`• ${r.role} (${r.matchScore}% match)`);
+                      lines.push(`  ${r.description}`);
+                      lines.push(`  Salary: ${r.salaryRange}`);
+                      lines.push(`  Skills needed: ${r.requiredSkills.join(", ")}`);
+                    });
+                  }
+                  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "resume-analysis-report.txt";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Download Report
               </AnimatedButton>

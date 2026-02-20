@@ -1,4 +1,4 @@
-import { Suspense, useRef, useEffect, useState } from "react";
+import React, { Suspense, useRef, useEffect, useState } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { gsap } from "gsap";
 import { ArrowRight, Play, Sparkles, Zap, Target, Loader2 } from "lucide-react";
@@ -11,8 +11,6 @@ import heroBg from "@/assets/hero-bg.jpg";
 
 // Lazy load 3D component
 const FloatingOrb = React.lazy(() => import("@/components/3d/FloatingOrb").then(m => ({ default: m.FloatingOrb })));
-
-import React from "react";
 
 const stats = [
   { value: 50000, suffix: "+", label: "Career Paths Generated" },

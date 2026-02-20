@@ -1,32 +1,53 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, Briefcase, Target, Zap, ArrowUpRight, Sparkles, BookOpen, Clock } from "lucide-react";
+import { TrendingUp, Briefcase, Target, Zap, ArrowUpRight, Sparkles, BookOpen, Clock, User, FileText, MessageSquare } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
 import { AnimatedButton } from "@/components/ui/animated-button";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Link } from "react-router-dom";
-
-const quickStats = [
-  { icon: Target, label: "Career Score", value: 85, suffix: "/100", color: "from-primary to-accent-foreground" },
-  { icon: Briefcase, label: "Job Matches", value: 24, suffix: "", color: "from-accent-foreground to-primary" },
-  { icon: BookOpen, label: "Skills to Learn", value: 6, suffix: "", color: "from-primary via-accent-foreground to-primary" },
-  { icon: Clock, label: "Days Active", value: 127, suffix: "", color: "from-accent-foreground to-primary" },
-];
-
-const recentJobs = [
-  { title: "Senior Frontend Developer", company: "TechCorp", match: 95, salary: "$150k - $180k" },
-  { title: "Full Stack Engineer", company: "StartupX", match: 88, salary: "$130k - $160k" },
-  { title: "React Lead Developer", company: "InnovateTech", match: 82, salary: "$140k - $170k" },
-];
-
-const upcomingTasks = [
-  { title: "Complete TypeScript certification", dueIn: "3 days", progress: 75 },
-  { title: "Update portfolio with new projects", dueIn: "1 week", progress: 40 },
-  { title: "Practice system design interview", dueIn: "5 days", progress: 20 },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { getUserProfile } from "@/integrations/firebase/firestore";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const firstName = user?.displayName?.split(" ")[0] || "there";
+  const [profileData, setProfileData] = useState<any>(null);
+
+  useEffect(() => {
+    if (user) {
+      getUserProfile(user.uid).then(setProfileData).catch(() => { });
+    }
+  }, [user]);
+
+  // Calculate dynamic stats from profile
+  const skillCount = profileData?.skills?.length || 0;
+  const hasTitle = !!profileData?.title;
+  const hasBio = !!profileData?.bio;
+  const hasLocation = !!profileData?.location;
+  const hasSocials = !!(profileData?.github || profileData?.linkedin || profileData?.twitter || profileData?.portfolio);
+  const profileCompletion = Math.min(100, [
+    !!user?.displayName,
+    !!user?.email,
+    hasTitle,
+    hasBio,
+    hasLocation,
+    hasSocials,
+    skillCount > 0,
+    skillCount >= 3,
+  ].filter(Boolean).length * 12.5);
+
+  const daysActive = user?.metadata?.creationTime
+    ? Math.max(1, Math.floor((Date.now() - new Date(user.metadata.creationTime).getTime()) / 86400000))
+    : 1;
+
+  const quickStats = [
+    { icon: Target, label: "Profile Completion", value: Math.round(profileCompletion), suffix: "%", color: "from-primary to-accent-foreground" },
+    { icon: Briefcase, label: "Skills Added", value: skillCount, suffix: "", color: "from-accent-foreground to-primary" },
+    { icon: BookOpen, label: "Days Active", value: daysActive, suffix: "", color: "from-primary via-accent-foreground to-primary" },
+    { icon: Clock, label: "Resume Analyses", value: 0, suffix: "", color: "from-accent-foreground to-primary" },
+  ];
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -37,7 +58,7 @@ export default function Dashboard() {
           transition={{ duration: 0.5 }}
         >
           <h1 className="text-2xl sm:text-3xl font-display font-bold mb-2">
-            Welcome back, <GradientText>Alex</GradientText>! 👋
+            Welcome back, <GradientText>{firstName}</GradientText>! 👋
           </h1>
           <p className="text-muted-foreground">
             Here's what's happening with your career journey today.
@@ -61,7 +82,7 @@ export default function Dashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
                   <p className="text-2xl font-display font-bold">
-                    <AnimatedCounter value={stat.value} suffix={stat.suffix} />
+                    {stat.value}{stat.suffix}
                   </p>
                 </div>
               </GlassCard>
@@ -71,7 +92,7 @@ export default function Dashboard() {
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Career Readiness Score */}
+          {/* Profile Completeness */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -80,10 +101,10 @@ export default function Dashboard() {
           >
             <GlassCard className="h-full">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-display font-semibold">Career Readiness</h2>
-                <Link to="/dashboard/career-map">
+                <h2 className="text-xl font-display font-semibold">Profile Readiness</h2>
+                <Link to="/dashboard/profile">
                   <AnimatedButton variant="ghost" size="sm">
-                    View Full Map <ArrowUpRight className="w-4 h-4" />
+                    Edit Profile <ArrowUpRight className="w-4 h-4" />
                   </AnimatedButton>
                 </Link>
               </div>
@@ -109,7 +130,7 @@ export default function Dashboard() {
                       strokeWidth="8"
                       strokeLinecap="round"
                       initial={{ pathLength: 0 }}
-                      animate={{ pathLength: 0.85 }}
+                      animate={{ pathLength: profileCompletion / 100 }}
                       transition={{ duration: 1.5, delay: 0.5 }}
                       style={{ filter: "drop-shadow(0 0 8px hsl(var(--primary) / 0.5))" }}
                     />
@@ -121,32 +142,26 @@ export default function Dashboard() {
                     </defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-4xl font-display font-bold gradient-text-hero">85</span>
+                    <span className="text-4xl font-display font-bold gradient-text-hero">{Math.round(profileCompletion)}</span>
                     <span className="text-sm text-muted-foreground">out of 100</span>
                   </div>
                 </div>
 
-                {/* Skills Breakdown */}
-                <div className="flex-1 space-y-4">
+                {/* Checklist */}
+                <div className="flex-1 space-y-3">
                   {[
-                    { skill: "Technical Skills", value: 90 },
-                    { skill: "Leadership", value: 75 },
-                    { skill: "Communication", value: 85 },
-                    { skill: "Problem Solving", value: 88 },
+                    { label: "Display name set", done: !!user?.displayName },
+                    { label: "Job title added", done: hasTitle },
+                    { label: "Bio written", done: hasBio },
+                    { label: "Location added", done: hasLocation },
+                    { label: "Social links added", done: hasSocials },
+                    { label: "3+ skills added", done: skillCount >= 3 },
                   ].map((item) => (
-                    <div key={item.skill}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>{item.skill}</span>
-                        <span className="text-muted-foreground">{item.value}%</span>
+                    <div key={item.label} className="flex items-center gap-3 text-sm">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${item.done ? "border-green-500 bg-green-500/20" : "border-muted-foreground/30"}`}>
+                        {item.done && <span className="text-green-500 text-xs">✓</span>}
                       </div>
-                      <div className="h-2 bg-accent rounded-full overflow-hidden">
-                        <motion.div
-                          className="h-full bg-gradient-to-r from-primary to-accent-foreground rounded-full"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${item.value}%` }}
-                          transition={{ duration: 1, delay: 0.5 }}
-                        />
-                      </div>
+                      <span className={item.done ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
                     </div>
                   ))}
                 </div>
@@ -171,16 +186,15 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-accent/50 border border-border">
                   <p className="text-sm leading-relaxed">
-                    Based on your skills and recent activity, consider focusing on{" "}
-                    <span className="font-semibold text-primary">System Design</span> to unlock
-                    senior-level opportunities.
+                    Complete your profile to get{" "}
+                    <span className="font-semibold text-primary">personalized career recommendations</span> from our AI mentor.
                   </p>
                 </div>
                 <div className="p-4 rounded-xl bg-accent/50 border border-border">
                   <p className="text-sm leading-relaxed">
-                    Your profile matches well with{" "}
-                    <span className="font-semibold text-primary">3 new positions</span> at top
-                    tech companies posted today.
+                    Upload your resume for{" "}
+                    <span className="font-semibold text-primary">AI-powered skill analysis</span> and
+                    job matching.
                   </p>
                 </div>
               </div>
@@ -194,86 +208,48 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* Bottom Grid */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Recent Job Matches */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-display font-semibold">Top Job Matches</h2>
-                <Link to="/dashboard/jobs">
-                  <AnimatedButton variant="ghost" size="sm">
-                    View All <ArrowUpRight className="w-4 h-4" />
-                  </AnimatedButton>
-                </Link>
-              </div>
-
-              <div className="space-y-4">
-                {recentJobs.map((job, index) => (
-                  <motion.div
-                    key={job.title}
-                    className="p-4 rounded-xl bg-accent/30 border border-border hover:border-primary/50 transition-colors cursor-pointer"
-                    whileHover={{ x: 4 }}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold">{job.title}</h3>
-                        <p className="text-sm text-muted-foreground">{job.company}</p>
-                        <p className="text-sm text-primary mt-1">{job.salary}</p>
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                        <TrendingUp className="w-3 h-3" />
-                        {job.match}%
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </GlassCard>
+        {/* Bottom Grid — Quick Actions */}
+        <div className="grid md:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+            <Link to="/dashboard/resume">
+              <GlassCard className="hover:border-primary/50 transition-colors cursor-pointer h-full">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-accent-foreground flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-primary-foreground" />
+                  </div>
+                  <h3 className="font-semibold">Resume Analysis</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">Upload your resume for AI-powered skill extraction and career recommendations.</p>
+              </GlassCard>
+            </Link>
           </motion.div>
 
-          {/* Learning Progress */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-display font-semibold">Learning Progress</h2>
-                <Link to="/dashboard/learning">
-                  <AnimatedButton variant="ghost" size="sm">
-                    View All <ArrowUpRight className="w-4 h-4" />
-                  </AnimatedButton>
-                </Link>
-              </div>
-
-              <div className="space-y-4">
-                {upcomingTasks.map((task, index) => (
-                  <div key={task.title} className="p-4 rounded-xl bg-accent/30 border border-border">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-medium text-sm">{task.title}</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Due in {task.dueIn}</p>
-                      </div>
-                      <span className="text-sm font-medium text-primary">{task.progress}%</span>
-                    </div>
-                    <div className="h-2 bg-accent rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-primary to-accent-foreground rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${task.progress}%` }}
-                        transition={{ duration: 0.8, delay: 0.3 + index * 0.1 }}
-                      />
-                    </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+            <Link to="/dashboard/jobs">
+              <GlassCard className="hover:border-primary/50 transition-colors cursor-pointer h-full">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-foreground to-primary flex items-center justify-center">
+                    <Briefcase className="w-5 h-5 text-primary-foreground" />
                   </div>
-                ))}
-              </div>
-            </GlassCard>
+                  <h3 className="font-semibold">Search Jobs</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">Browse real job listings from top companies across the world.</p>
+              </GlassCard>
+            </Link>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+            <Link to="/dashboard/mentor">
+              <GlassCard className="hover:border-primary/50 transition-colors cursor-pointer h-full">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary via-accent-foreground to-primary flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-primary-foreground" />
+                  </div>
+                  <h3 className="font-semibold">AI Career Mentor</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">Get personalized career advice, interview prep, and learning guidance.</p>
+              </GlassCard>
+            </Link>
           </motion.div>
         </div>
       </div>
