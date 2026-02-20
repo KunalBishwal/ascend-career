@@ -3,6 +3,7 @@ import { motion, useInView } from "framer-motion";
 import { Upload, Cpu, Route, Rocket } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GradientText } from "@/components/ui/gradient-text";
+import { FloatingLines } from "@/components/ui/floating-lines";
 
 const steps = [
   {
@@ -41,7 +42,16 @@ export function HowItWorksSection() {
 
   return (
     <section id="how-it-works" className="py-24 relative overflow-hidden">
-      <div className="container mx-auto px-4">
+      {/* Floating Lines Background */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <FloatingLines
+          linesGradient={['#3B82F6', '#8B5CF6', '#EC4899']}
+          lineCount={[8]}
+          parallaxStrength={0.1}
+        />
+      </div>
+
+      <div className="container mx-auto px-4 relative z-10">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
